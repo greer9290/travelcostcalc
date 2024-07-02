@@ -1,0 +1,52 @@
+from pyairports.airports import Airports
+airports = Airports()
+
+Airports.lookup
+airresponse = airports.airport_iata('MCI')
+print(airresponse)
+airresponse = airports.airport_iata('DEN')
+print(airresponse)
+airresponse = airports.airport_iata('PHX')
+print(airresponse)
+airresponse = airports.airport_iata('LAX')
+print(airresponse)
+airresponse = airports.airport_iata('JFK')
+print(airresponse)
+airresponse = airports.airport_iata('DTW')
+print(airresponse)
+airresponse = airports.airport_iata('ATL')
+print(airresponse)
+airresponse = airports.airport_iata('CLT')
+print(airresponse.lon)
+
+ # namedtuple(airport, [name, city, country, iata, icao, lat, lon, alt, tz, dst, tzdb]) or AirportNotFoundException
+#airports.other_iata(iata)   # namedtuple(other, [iata, name, country, subdiv, type, lat, lon]) or AirportNotFoundException
+#airports.lookup(iata)       # namedtuple(airport) or namedtuple(other) or AirportNotFoundException
+
+airresponse = airports.lookup('DFW')
+print(airresponse.lon)
+print(airresponse.lat)
+
+Denver:
+Lat 39.7
+Lon -105.15
+
+Kansas City
+Lat 39.11
+Lon -94.51
+
+DFW
+Lat 32.74
+Lon -96.80
+
+PHX
+Lat 33.45
+Lon -112
+
+Detroit
+Lat 42.31
+Lon -83.05
+
+ATL
+Lat 33.78
+Lon -84.41

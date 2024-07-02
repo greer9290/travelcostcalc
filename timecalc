@@ -1,0 +1,29 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+import requests
+import json
+import csv
+from datetime import datetime, timedelta
+from statistics import mean
+import os
+import time
+import pandas as pd    
+
+def timecheck():
+    
+    today = datetime.now()
+    next_monday = today + timedelta(days=(7 - today.weekday() + 0))
+    depart_date = next_monday.strftime('%Y-%m-%d')
+    return_date = (next_monday + timedelta(days=2)).strftime('%Y-%m-%d')
+
+    print(depart_date)
+    print(return_date)
+    
+
+    return depart_date, return_date
+
+def main():
+    timecheck()
+
+if __name__ == "__main__":
+    main()

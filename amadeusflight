@@ -1,0 +1,77 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+import csv
+import json
+from datetime import datetime, timedelta
+import os
+import time
+import pandas as pd
+from amadeus import Client, ResponseError
+import logging
+import ssl
+
+# Replace with your Amadeus API credentials
+amadeus = Client(
+    client_id='OrUx7h1FI2oq4sqL8AWX2nVNJIGglcGw',
+    client_secret='1ttndaQhCwXxyDSS',
+)
+
+def get_travel_costs(origin, destination, numdays_str):
+    numdays = int(numdays_str)
+    
+    today = datetime.now()
+    next_monday = today + timedelta(days=(7 - today.weekday() + 0) % 7)
+    depart_date = next_monday.strftime('%Y-%m-%d')
+    return_date = (next_monday + timedelta(days=numdays)).strftime('%Y-%m-%d')
+
+    try:
+        # Flight search
+        flight_response_dep = amadeus.shopping.flight_offers_search.get(
+            originLocationCode=origin,
+            destinationLocationCode=destination,
+            departureDate=depart_date,
+            adults=1
+        )
+        flight_prices_dep = [offer['price']['total'] for offer in flight_response_dep.data]
+        average_flight_price_dep = sum(float(price) for price in flight_prices_dep) / len(flight_prices_dep) if flight_prices_dep else 0
+
+        flight_response_ret = amadeus.shopping.flight_offers_search.get(
+            originLocationCode=destination,
+            destinationLocationCode=origin,
+            departureDate=return_date,
+            adults=1
+        )
+        flight_prices_ret = [offer['price']['total'] for offer in flight_response_ret.data]
+        average_flight_price_ret = sum(float(price) for price in flight_prices_ret) / len(flight_prices_ret) if flight_prices_ret else 0        
+
+        print(average_flight_price_dep)
+        print(average_flight_price_ret)
+
+        average_flight_price = (average_flight_price_ret + average_flight_price_dep) / 2
+
+        print("Average flight price: ", average_flight_price)
+        
+        return average_flight_price
+    
+    except ResponseError as error:
+        print("Amadeus API Error:")
+        print(error.code)
+        print(error.error_description)
+        print(error.response)
+        print(error.short_description)
+
+        raise Exception("Error fetching data from Amadeus API. See console for details.")
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        raise
+
+def main():
+    origin = input("Input origin airport code: ")
+    destination = input("Input destination airport code :")
+    numdays_str = input("Input number of days on the road: ")
+    get_travel_costs(origin, destination, numdays_str)
+
+if __name__ == "__main__":
+    main()
+
+
