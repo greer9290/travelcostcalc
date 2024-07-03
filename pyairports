@@ -1,4 +1,7 @@
 from pyairports.airports import Airports
+from datetime import datetime
+from dateutil import relativedelta
+
 airports = Airports()
 
 Airports.lookup
@@ -23,10 +26,22 @@ print(airresponse.lon)
 #airports.other_iata(iata)   # namedtuple(other, [iata, name, country, subdiv, type, lat, lon]) or AirportNotFoundException
 #airports.lookup(iata)       # namedtuple(airport) or namedtuple(other) or AirportNotFoundException
 
-airresponse = airports.lookup('DFW')
-print(airresponse.lon)
-print(airresponse.lat)
+airresponse = airports.lookup('SLC')
+print("SLC lon", airresponse.lon)
 
+airresponse = airports.lookup('LAX')
+print("LAX lon", airresponse.lon)
+
+depart_date = '2024-04-03'
+return_date = '2025-04-10'
+
+dd_dt = datetime.strptime(depart_date, "%Y-%m-%d")
+rd_dt = datetime.strptime(return_date, "%Y-%m-%d")
+
+
+numdays = (rd_math-dd_math).days
+print(numdays)
+"""
 Denver:
 Lat 39.7
 Lon -105.15
@@ -50,3 +65,4 @@ Lon -83.05
 ATL
 Lat 33.78
 Lon -84.41
+"""

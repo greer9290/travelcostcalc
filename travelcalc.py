@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 import csv
 import json
 from datetime import datetime, timedelta
+from dateutil import relativedelta
 import os
 import time
 import pandas as pd
@@ -39,21 +40,20 @@ loading_widget = False
 amadeus = Client(
     client_id='OrUx7h1FI2oq4sqL8AWX2nVNJIGglcGw',
     client_secret='1ttndaQhCwXxyDSS',
-    hostname='test',
+    hostname='production',
     logger=logger,
 )
 
 SLC = airports.airport_iata("SLC")
 ATL = airports.airport_iata("ATL")
 
-async def get_rate_multi(destdata, rate_multi):
+def get_rate_multi(destdata):
     if destdata.country != "United States":
         rate_multi = 1.5
         return rate_multi  # 50% increase for international
     
     # Check if west of Salt Lake City or east of Atlanta
-    if (destdata.lon < SLC.lon or 
-        destdata.lon > ATL.lon):
+    if (destdata.lon > SLC.lon) or (destdata.lon < ATL.lon):
         rate_multi = 1.25
         return rate_multi
     
@@ -61,7 +61,7 @@ async def get_rate_multi(destdata, rate_multi):
     return rate_multi  # No increase
 
 
-async def get_travel_costs(origin, destination, numdays_str, margin_str, avg_hotel_ntly_str, car_rate_str, meal_cost_str):
+async def get_travel_costs(depart_date, return_date, origin, destination, numdays_str, margin_str, avg_hotel_ntly_str, car_rate_str, meal_cost_str):
     
     try:
         destdata = airports.airport_iata(destination)
@@ -69,21 +69,19 @@ async def get_travel_costs(origin, destination, numdays_str, margin_str, avg_hot
         print(f"Error looking up airport: {str(e)}")
         return None
 
-    get_rate_multi(destdata)
+    rtmult = get_rate_multi(destdata)
 
-    
+    print("Rate mult:", rtmult)
 
-    car_rate = (float(car_rate_str) if car_rate_str else car_rate_std) * rate_multi
-    meal_cost_per_day = (float(meal_cost_str) if meal_cost_str else meal_cost_std) * rate_multi
-    hotel_rate = (int(avg_hotel_ntly_str) if avg_hotel_ntly_str else hotel_cost_std) * rate_multi
+    dd_dt = datetime.strptime(depart_date, "%Y-%m-%d")
+    rd_dt = datetime.strptime(return_date, "%Y-%m-%d")
 
-    margin = float(margin_str) if margin_str else margin_std
-    numdays = int(numdays_str) if numdays_str else numdays_std
+    numdays = int(numdays_str) if numdays_str else (rd_dt-dd_dt).days #standard 3 day trip
 
-    today = datetime.now()
-    next_monday = today + timedelta(days=(7 - today.weekday() + 0))
-    depart_date = next_monday.strftime('%Y-%m-%d')
-    return_date = (next_monday + timedelta(days=numdays)).strftime('%Y-%m-%d')
+#    today = datetime.now()
+#    next_monday = today + timedelta(days=(7 - today.weekday() + 0))
+#    depart_date = next_monday.strftime('%Y-%m-%d')
+#    return_date = (next_monday + timedelta(days=numdays)).strftime('%Y-%m-%d')
 
     try:
         # Flight search
@@ -94,6 +92,7 @@ async def get_travel_costs(origin, destination, numdays_str, margin_str, avg_hot
             departureDate=depart_date,
             returnDate=return_date,
             adults=1,
+            includedAirlineCodes='AA,WN,UA,DL',
             travelClass='ECONOMY',
             currencyCode='USD'
         )
@@ -102,6 +101,13 @@ async def get_travel_costs(origin, destination, numdays_str, margin_str, avg_hot
         average_flight_price_rt = sum(float(price) for price in flight_prices_rt) / len(flight_prices_rt) if flight_prices_rt else 0      
 
         # Calculate total and daily costs
+
+        
+        car_rate = (float(car_rate_str) if car_rate_str else car_rate_std) * rtmult
+        meal_cost_per_day = (float(meal_cost_str) if meal_cost_str else meal_cost_std) * rtmult
+        hotel_rate = (int(avg_hotel_ntly_str) if avg_hotel_ntly_str else hotel_cost_std) * rtmult
+
+        margin = float(margin_str) if margin_str else margin_std
 
         total_hotel_cost = hotel_rate * numdays
         total_car_cost = car_rate * numdays
@@ -251,6 +257,14 @@ class TravelCostApp(tk.Tk):
         ttk.Label(left_frame, text="Destination (airport code):").grid(row=1, column=0, sticky="e", padx=(0, 5), pady=1)
         self.destination_entry = ttk.Entry(left_frame)
         self.destination_entry.grid(row=1, column=1, sticky="ew", pady=1)
+
+        ttk.Label(left_frame, text="Departure Date (YYYY-MM-DD):").grid(row=2, column=0, sticky="e", padx=(0, 5), pady=1)
+        self.departdate_entry = ttk.Entry(left_frame)
+        self.departdate_entry.grid(row=2, column=1, sticky="ew", pady=1)
+
+        ttk.Label(left_frame, text="Return Date (YYYY-MM-DD):").grid(row=3, column=0, sticky="e", padx=(0, 5), pady=1)
+        self.returndate_entry = ttk.Entry(left_frame)
+        self.returndate_entry.grid(row=3, column=1, sticky="ew", pady=1)
 
         # Right Frame Contents
         ttk.Label(right_frame, text="Optional Values").grid(row=0, column=0, columnspan=2, sticky="w", pady=1)
@@ -414,6 +428,8 @@ class TravelCostApp(tk.Tk):
     def calculate_and_save(self):
         origin = self.origin_entry.get().upper()
         destination = self.destination_entry.get().upper()
+        depart_date = self.departdate_entry.get()
+        return_date = self.returndate_entry.get()
         numdays_str = self.days_entry.get()
         margin_str = self.margin_entry.get()
         avg_hotel_ntly_str = self.hotelrate_entry.get()
@@ -424,7 +440,7 @@ class TravelCostApp(tk.Tk):
             self.show_loading_window()
             
             # Run the asynchronous function
-            results = asyncio.run(get_travel_costs(origin, destination, numdays_str, margin_str, avg_hotel_ntly_str, car_rate_str, meal_cost_str))
+            results = asyncio.run(get_travel_costs(depart_date, return_date, origin, destination, numdays_str, margin_str, avg_hotel_ntly_str, car_rate_str, meal_cost_str))
             
             self.hide_loading_window()
             
