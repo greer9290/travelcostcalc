@@ -1,35 +1,23 @@
 # src/gui/main_window.py
-
-
-from tkinter import ttk, messagebox
-import csv
-from datetime import datetime
-import os
-from ttkbootstrap import Style
-import subprocess
-import ttkthemes
-
-
-
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
-from ttkbootstrap import Style
-from gui.settings_tab import SettingsTab
-from gui.simple_calendar import SimpleCalendar
-import travel_cost_calculator as tcc
-import os
-from travel_cost_calculator import get_travel_costs
-from csv_handler import log_to_csv, load_csv_data, delete_from_csv
+from tkinter import simpledialog, messagebox
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+from datetime import datetime
+import os, csv, json, subprocess
+from gui import settings_tab
+from gui import simple_calendar
+from travel_cost_calculator import get_travel_costs, car_rate_std, margin_std, numdays_std, meal_cost_std, hotel_cost_std, json_flight_path
+from csv_handler import log_to_csv, load_csv_data, delete_from_csv, csv_path
 
-class TravelCostApp(tk.Tk):
+class TravelCostApp(ttk.Window):
     def __init__(self):
-        super().__init__()
+        self.settings = self.load_settings()
+        self.current_theme = self.settings.get('theme', 'cosmo')
+        super().__init__(themename=self.current_theme)
         
         self.title("Travel Cost Calculator")
         self.state('zoomed')
-
-        self.style = Style(theme="flatly")
-        self.current_theme = "flatly"
 
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -37,17 +25,103 @@ class TravelCostApp(tk.Tk):
         self.main_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.main_frame, text="Travel Cost Calculator")
 
-        self.create_widgets()
+        self.results_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.results_frame, text="Results")
 
-        self.settings_frame = SettingsTab(self.notebook, self)
+        self.flight_data_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.flight_data_frame, text="Flight Data")
+
+        self.create_widgets()
+        self.create_results_tab()
+        self.create_flight_data_tab()
+
+        self.settings_frame = settings_tab.SettingsTab(self.notebook, self)
         self.notebook.add(self.settings_frame, text="Settings")
 
+        # Load CSV data after widgets are created
+        self.load_csv_data()
+        self.update_flight_data()
+
+    def load_settings(self):
+        try:
+            with open('settings.json', 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {'theme': 'cosmo'}  # Default theme
+
+    def change_theme(self, new_theme):
+        self.current_theme = new_theme
+        self.style.theme_use(new_theme)
+
     def load_csv_data(self):
-            load_csv_data(self.tree)
+        # Clear existing data
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        try:
+            with open('travel_costs.csv', 'r') as csvfile:
+                reader = csv.DictReader(csvfile)
+                for row in reader:
+                    self.tree.insert('', 'end', values=(
+                        row['Depart Date'], row['Return Date'], row['Origin'], row['Destination'],
+                        row['Flight Price'], row['Hotel Cost'], row['Car Rental Cost'], row['Meal Cost'],
+                        row['Number of Days'], row['Total Cost'], row['Sales Price']
+                    ))
+        except FileNotFoundError:
+            print("CSV file not found.")
+        except csv.Error as e:
+            print(f"Error reading CSV file: {e}")
 
     def on_tab_change(self, event):
         pass  # We'll keep this method in case you want to add functionality later
 
+    def create_results_tab(self):
+        # Table Frame
+        table_frame = ttk.Frame(self.results_frame, padding="10")
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Configure Treeview colors and style
+        self.style.configure("Treeview", rowheight=25)
+        self.style.configure("Treeview.Heading", font=('Arial', 10, 'bold'))
+
+        # Create the Treeview
+        self.tree = ttk.Treeview(table_frame, 
+                                columns=('Depart Date', 'Return Date', 'Origin', 'Destination', 
+                                        'Flight Price', 'Hotel Cost', 'Car Rental Cost', 'Meal Cost', 
+                                        'Number of Days', 'Total Cost', 'Sales Price'), 
+                                show='headings')
+
+        # Configure column headings and widths
+        column_widths = {
+            'Depart Date': 100,
+            'Return Date': 100,
+            'Origin': 80,
+            'Destination': 80,
+            'Flight Price': 100,
+            'Hotel Cost': 100,
+            'Car Rental Cost': 120,
+            'Meal Cost': 100,
+            'Number of Days': 120,
+            'Total Cost': 100,
+            'Sales Price': 100
+        }
+
+        for col in self.tree['columns']:
+            self.tree.heading(col, text=col, anchor=tk.W)
+            self.tree.column(col, width=column_widths.get(col, 100), anchor=tk.W)
+
+        # Add a vertical scrollbar
+        vsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=vsb.set)
+
+        # Grid layout for Treeview and scrollbar
+        self.tree.grid(row=0, column=0, sticky='nsew')
+        vsb.grid(row=0, column=1, sticky='ns')
+
+        # Configure the grid
+        table_frame.grid_rowconfigure(0, weight=1)
+        table_frame.grid_columnconfigure(0, weight=1)
+    
     def show_loading_window(self):
         self.loading_window = tk.Toplevel(self)
         self.loading_window.title("Loading")
@@ -63,12 +137,80 @@ class TravelCostApp(tk.Tk):
     def hide_loading_window(self):
         if hasattr(self, 'loading_window'):
             self.loading_window.destroy()
+    
+    def create_flight_data_tab(self):
+        frame = ttk.Frame(self.flight_data_frame)
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Create Treeview
+        columns = ('Departure Time', 'Airline', 'Stops', 'Price')
+        self.flight_tree = ttk.Treeview(frame, columns=columns, show='headings')
+
+        # Define headings
+        for col in columns:
+            self.flight_tree.heading(col, text=col)
+            self.flight_tree.column(col, width=100, anchor=tk.CENTER)
+
+        # Add a scrollbar
+        scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=self.flight_tree.yview)
+        self.flight_tree.configure(yscroll=scrollbar.set)
+
+        # Pack the Treeview and scrollbar
+        self.flight_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.setup_treeview_sorting()
+
+    def setup_treeview_sorting(self):
+        for col in self.flight_tree['columns']:
+            self.flight_tree.heading(col, text=col, command=lambda _col=col: self.treeview_sort_column(_col, False))
+
+    def treeview_sort_column(self, col, reverse):
+        l = [(self.flight_tree.set(k, col), k) for k in self.flight_tree.get_children('')]
+        l.sort(reverse=reverse)
+
+        # Rearrange items in sorted positions
+        for index, (val, k) in enumerate(l):
+            self.flight_tree.move(k, '', index)
+
+        # Reverse sort next time
+        self.flight_tree.heading(col, command=lambda: self.treeview_sort_column(col, not reverse))
+
+    def update_flight_data(self):
+    # Clear existing data
+        for i in self.flight_tree.get_children():
+            self.flight_tree.delete(i)
+
+        try:
+            with open(json_flight_path, 'r') as f:
+                flight_data = json.load(f)
+        except FileNotFoundError:
+            print("Flight data file not found.")
+            return
+        except json.JSONDecodeError:
+            print("Error decoding JSON file.")
+            return
+
+        # Join best_departing_flights and other_departing_flights
+        all_flights = flight_data.get('best_departing_flights', []) + flight_data.get('other_departing_flights', [])
+
+        # Sort flights by departure_date
+        sorted_flights = sorted(all_flights, key=lambda x: x['departure_date'])
+
+        for flight in sorted_flights:
+            self.flight_tree.insert('', tk.END, values=(
+                flight['departure_date'],
+                flight['company'],
+                flight['stops'],
+                flight['price']
+            ))
 
     def open_flight_data(self):
-        file_path = 'google_flight_results.json'
-        if os.path.exists(file_path):
+        print("Attempting to Open Flight Data")
+        print("Flight path opened")
+        if os.path.exists(json_flight_path):
             if os.name == 'nt':  # For Windows
-                os.startfile(file_path)
+                os.startfile(json_flight_path)
             elif os.name == 'posix':  # For macOS and Linux
                 subprocess.call(('open', file_path))
             else:
@@ -129,23 +271,23 @@ class TravelCostApp(tk.Tk):
         # Right Frame Contents
         ttk.Label(right_frame, text="Optional Values (defaults applied if left blank)").grid(row=0, column=0, columnspan=2, sticky="w", pady=1)
 
-        ttk.Label(right_frame, text=f"Number of Days (def: {tcc.numdays_std}):").grid(row=1, column=0, sticky="e", padx=(0, 5), pady=1)
+        ttk.Label(right_frame, text=f"Number of Days (def: {numdays_std}):").grid(row=1, column=0, sticky="e", padx=(0, 5), pady=1)
         self.days_entry = ttk.Entry(right_frame)
         self.days_entry.grid(row=1, column=1, sticky="ew", pady=1)
 
-        ttk.Label(right_frame, text=f"Desired Margin (def: {tcc.margin_std}):").grid(row=2, column=0, sticky="e", padx=(0, 5), pady=1)
+        ttk.Label(right_frame, text=f"Desired Margin (def: {margin_std}):").grid(row=2, column=0, sticky="e", padx=(0, 5), pady=1)
         self.margin_entry = ttk.Entry(right_frame)
         self.margin_entry.grid(row=2, column=1, sticky="ew", pady=1)
 
-        ttk.Label(right_frame, text=f"Hotel rate (def: ${tcc.hotel_cost_std}):").grid(row=3, column=0, sticky="e", padx=(0, 5), pady=1)
+        ttk.Label(right_frame, text=f"Hotel rate (def: ${hotel_cost_std}):").grid(row=3, column=0, sticky="e", padx=(0, 5), pady=1)
         self.hotelrate_entry = ttk.Entry(right_frame)
         self.hotelrate_entry.grid(row=3, column=1, sticky="ew", pady=1)
 
-        ttk.Label(right_frame, text=f"Rental Cost (def: ${tcc.car_rate_std}):").grid(row=4, column=0, sticky="e", padx=(0, 5), pady=1)
+        ttk.Label(right_frame, text=f"Rental Cost (def: ${car_rate_std}):").grid(row=4, column=0, sticky="e", padx=(0, 5), pady=1)
         self.car_rate_entry = ttk.Entry(right_frame)
         self.car_rate_entry.grid(row=4, column=1, sticky="ew", pady=1)
 
-        ttk.Label(right_frame, text=f"Meal Cost (def: ${tcc.meal_cost_std})").grid(row=5, column=0, sticky="e", padx=(0, 5), pady=1)
+        ttk.Label(right_frame, text=f"Meal Cost (def: ${meal_cost_std})").grid(row=5, column=0, sticky="e", padx=(0, 5), pady=1)
         self.meal_cost_entry = ttk.Entry(right_frame)
         self.meal_cost_entry.grid(row=5, column=1, sticky="ew", pady=1)
 
@@ -158,28 +300,17 @@ class TravelCostApp(tk.Tk):
         buttons_frame.pack(fill=tk.X, padx=10, pady=10)
 
         ttk.Button(buttons_frame, text="Calculate", style="Calculate.TButton", command=self.calculate_and_save).pack(fill=tk.X, padx=5, pady=1)
-        ttk.Button(buttons_frame, text="Delete Selected", style="Delete.TButton", command=self.delete_selected).pack(fill=tk.X, padx=5, pady=1)
-        ttk.Button(buttons_frame, text="Delete All Items", style="DeleteAll.TButton", command=self.delete_all).pack(fill=tk.X, padx=5, pady=1)
+        ttk.Button(buttons_frame, text="Delete Selected", bootstyle=WARNING, command=self.delete_selected).pack(fill=tk.X, padx=5, pady=1)
+        ttk.Button(buttons_frame, text="Delete All Items", bootstyle=DANGER, command=self.delete_all).pack(fill=tk.X, padx=5, pady=1)
 
         # Table Frame
         table_frame = ttk.Frame(self.main_frame, padding="10")
         table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Configure Treeview colors and style
         self.style.configure("Treeview", 
-                            background="#2c3e50", 
-                            foreground="white", 
-                            rowheight=25, 
-                            fieldbackground="#2c3e50")
-        self.style.map("Treeview", background=[("selected", "#34495e")])
-
+                            rowheight=25)
         self.style.configure("Treeview.Heading", 
-                            background="#34495e", 
-                            foreground="white", 
-                            relief="flat",
                             font=('Arial', 10, 'bold'))
-        self.style.map("Treeview.Heading", 
-                    background=[("active", "#2c3e50")])
 
         # Create the Treeview
         self.tree = ttk.Treeview(table_frame, 
@@ -229,7 +360,7 @@ class TravelCostApp(tk.Tk):
         except ValueError:
             current_date = datetime.now().date()
 
-        cal_dialog = SimpleCalendar(self, initial_date=current_date)
+        cal_dialog = simple_calendar.SimpleCalendar(self, initial_date=current_date)
         self.wait_window(cal_dialog)
         
         if cal_dialog.selected_date:
@@ -257,7 +388,7 @@ class TravelCostApp(tk.Tk):
                 self.notebook.forget(self.dummy_settings_frame)
                 
                 # Create and add the actual settings frame
-                self.settings_frame = SettingsTab(self.notebook, self)
+                self.settings_frame = settings_tab.SettingsTab(self.notebook, self)
                 self.notebook.add(self.settings_frame, text="Settings")
                 self.settings_tab_created = True  # Set the flag
             else:
@@ -299,9 +430,9 @@ class TravelCostApp(tk.Tk):
                     self.tree.delete(i)
                 
                 # Clear all data from the CSV file
-                filename = 'travel_costs.csv'
+                
                 try:
-                    with open(filename, 'w', newline='') as csvfile:
+                    with open(csv_path, 'w', newline='') as csvfile:
                         writer = csv.writer(csvfile)
                         writer.writerow(['Depart Date', 'Return Date', 'Origin', 'Destination', 'Flight Price', 'Hotel Cost', 'Car Rental Cost', 'Meal Cost', 'Number of Days', 'Total Cost', 'Sales Price'])  # Write header only
                     print("All data has been deleted from the CSV file.")
@@ -313,7 +444,7 @@ class TravelCostApp(tk.Tk):
                 # Optionally, delete all JSON files
                 try:
                     for file in os.listdir():
-                        if file.startswith("amadeus_responses_") and file.endswith(".json"):
+                        if file.endswith(".json"):
                             os.remove(file)
                     print("All JSON response files have been deleted.")
                 except Exception as e:
@@ -352,6 +483,13 @@ class TravelCostApp(tk.Tk):
         except Exception as e:
             self.hide_loading_window()
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
+
+        if log_to_csv(depart_date, return_date, origin, destination, average_flight_price, hotel_cost, car_cost, meal_cost, numdays, total_cost, sales_price):
+            messagebox.showinfo("Success", "Data calculated and saved successfully!")
+            load_csv_data(self.tree)  # Refresh the Treeview after saving
+            self.update_flight_data()  # Update the flight data tab
+        else:
+            messagebox.showerror("Error", "Failed to save data to CSV file.")
 
     def show_advanced_fields(self):
         self.margin_entry.grid()

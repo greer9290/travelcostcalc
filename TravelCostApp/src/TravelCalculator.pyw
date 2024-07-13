@@ -7,9 +7,9 @@ from pathlib import Path
 src_dir = Path(__file__).resolve().parent
 sys.path.append(str(src_dir))
 
-from gui.main_window import TravelCostApp
+from gui import main_window
 
 if __name__ == "__main__":
-    app = TravelCostApp()
+    app = main_window.TravelCostApp()
     app.notebook.bind("<<NotebookTabChanged>>", app.on_tab_change)
     app.mainloop()

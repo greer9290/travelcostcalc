@@ -1,7 +1,6 @@
-import json
+import json, os
 from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright
-import json
 from pyairports.airports import Airports
 from google_flights_scraper import get_google_flights_page, scrape_google_flights
 
@@ -16,6 +15,11 @@ hotel_cost_std = 165
 margin_std = 0.35
 numdays_std = 3
 
+# Get the directory of the current json
+json_dir = os.path.dirname(os.path.abspath(__file__))
+# Construct the absolute path to the json file
+json_flight_path = os.path.join(json_dir, '..', 'data', 'google_flight_results.json')
+
 def get_rate_multi(destdata):
     if destdata.country != "United States":
         rate_multi = 1.5
@@ -28,6 +32,14 @@ def get_rate_multi(destdata):
     
     rate_multi = 1.00
     return rate_multi  # No increase
+
+def delete_last_flight_data():
+    if os.path.exists(json_flight_path):
+        os.remove(json_flight_path)
+        print("Deleted last flight json records")
+    else:
+        print("Delete last flight unsuccessful")
+        return
 
 def get_travel_dates(depart_date, return_date, numdays_str):
     today = datetime.now()
@@ -71,7 +83,10 @@ def get_travel_costs(depart_date, return_date, origin, destination, numdays_str,
     # Use the new function to get formatted dates and numdays
     depart_date, return_date, numdays = get_travel_dates(depart_date, return_date, numdays_str)
     print(depart_date, return_date, numdays)
-
+    try:
+        delete_last_flight_data()
+    except:
+        pass
     try:
         # Flight search
         if flight_cost_str:
@@ -80,8 +95,9 @@ def get_travel_costs(depart_date, return_date, origin, destination, numdays_str,
             with sync_playwright() as playwright:
                 parser = get_google_flights_page(playwright, origin, destination, depart_date, return_date)
                 flight_results = scrape_google_flights(parser)
-                with open("google_flight_results.json", "a", newline="") as f:
+                with open(json_flight_path, "w", newline="") as f:
                     json.dump(flight_results, f, indent=2)
+                    print("Json file created after playwright")
             first_category = next(iter(flight_results.values()))
             flight_prices_rt = [float(flight['price'].replace('$', '').replace(',', '')) for flight in first_category]
             average_flight_price_rt = sum(flight_prices_rt) / len(flight_prices_rt) if flight_prices_rt else 0

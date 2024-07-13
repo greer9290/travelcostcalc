@@ -2,14 +2,19 @@ import csv
 import os
 import time
 
+# Get the directory of the current json
+csv_dir = os.path.dirname(os.path.abspath(__file__))
+# Construct the absolute path to the json file
+csv_path = os.path.join(csv_dir, '..', 'data', 'travel_costs.csv')
+csv_temp_path = os.path.join(csv_dir, '..', 'data', 'temp', 'temp_travel_costs.csv')
+
 def load_csv_data(tree):
-    filename = 'travel_costs.csv'
-    if os.path.isfile(filename):
+    if os.path.isfile(csv_path):
         # Clear existing data
         for i in tree.get_children():
             tree.delete(i)
         
-        with open(filename, 'r', newline='') as csvfile:
+        with open(csv_path, 'r', newline='') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:                    
                 # Explicitly map CSV columns to Treeview columns
@@ -30,15 +35,14 @@ def load_csv_data(tree):
 
 
 def log_to_csv(depart_date, return_date, origin, destination, average_flight_price, hotel_cost, car_cost, meal_cost, numdays, total_cost, sales_price):
-    filename = 'travel_costs.csv'
     max_attempts = 5
     attempt = 0
 
     while attempt < max_attempts:
         try:
-            file_exists = os.path.isfile(filename)
+            file_exists = os.path.isfile(csv_path)
             
-            with open(filename, 'a', newline='') as csvfile:
+            with open(csv_path, 'a', newline='') as csvfile:
                 fieldnames = ['Depart Date', 'Return Date', 'Origin', 'Destination', 'Flight Price', 'Hotel Cost', 'Car Rental Cost', 'Meal Cost', 'Number of Days', 'Total Cost', 'Sales Price']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
@@ -69,10 +73,8 @@ def log_to_csv(depart_date, return_date, origin, destination, average_flight_pri
         return False
     
 def delete_from_csv(values):
-        filename = 'travel_costs.csv'
-        temp_filename = 'temp_travel_costs.csv'
         
-        with open(filename, 'r') as csvfile, open(temp_filename, 'w', newline='') as tempfile:
+        with open(csv_path, 'r') as csvfile, open(csv_temp_path, 'w', newline='') as tempfile:
             reader = csv.reader(csvfile)
             writer = csv.writer(tempfile)
             
@@ -83,5 +85,5 @@ def delete_from_csv(values):
                 if row != values:
                     writer.writerow(row)
         
-        os.remove(filename)
-        os.rename(temp_filename, filename)
+        os.remove(csv_path)
+        os.rename(csv_temp_path, csv_path)
