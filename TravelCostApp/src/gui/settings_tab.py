@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import json
+import ttkthemes
 
 class SettingsTab(ttk.Frame):
     def __init__(self, parent, main_app):
@@ -14,7 +15,7 @@ class SettingsTab(ttk.Frame):
     def create_widgets(self):
         ttk.Label(self, text="Theme:").grid(row=0, column=0, sticky="e", padx=(0, 5), pady=5)
         self.theme_var = tk.StringVar(value=self.settings.get('theme', self.main_app.current_theme))
-        self.theme_combobox = ttk.Combobox(self, textvariable=self.theme_var, values=["flatly", "darkly"])
+        self.theme_combobox = ttk.Combobox(self, textvariable=self.theme_var, values=["flatly", "darkly", "clam", "classic", "aquativo", "black", "blue", "clearlooks", "elegance", "itft1", "keramik", "kroc", "plastik", "radiance", "smog"])
         self.theme_combobox.grid(row=0, column=1, sticky="ew", pady=5)
         self.theme_combobox.bind("<<ComboboxSelected>>", self.change_theme)
         ttk.Button(self, text="Load Flight Data", command=self.main_app.open_flight_data).grid(row=2, column=0, columnspan=2, pady=10)
